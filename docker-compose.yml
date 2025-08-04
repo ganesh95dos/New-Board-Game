@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  h2-database:
+    image: oscarfonts/h2:2.1.214
+    container_name: h2-database-container
+    ports:
+      - "8081:8082"  # H2 Web Console
+      - "9092:9092"  # H2 TCP Server
+    environment:
+      - H2_OPTIONS=-web -webAllowOthers -tcp -tcpAllowOthers -baseDir /opt/h2-data
+    volumes:
+      - h2-data:/opt/h2-data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 9092 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - board-game-network
+
+  board-game-app:
+    image: ganeshmestry21/new-board-game:latest
+    container_name: board-game-container
+    ports:
+      - "8000:8080"
+    depends_on:
+      h2-database:
+        condition: service_healthy
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:h2:tcp://h2-database:9092/mem:testdb
+      - SPRING_DATASOURCE_USERNAME=sa
+      - SPRING_DATASOURCE_PASSWORD=
+      - SPRING_H2_CONSOLE_ENABLED=true
+      - JAVA_OPTS=-Xmx512m -Xms256m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0
+      - SPRING_PROFILES_ACTIVE=docker
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - board-game-network
+
+volumes:
+  h2-data:
+    driver: local
+    name: board-game-h2-data
+
+networks:
+  board-game-network:
+    driver: bridge
+    name: board-game-network
